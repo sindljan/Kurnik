@@ -40,9 +40,31 @@ void setup() {
 }
 
 //****************Program******************//
-void ReadFromLightSenzor() {
-  // načtení hodnoty z analogového pinu
-  lightIntens = analogRead(analogPin);
+void ReadFromLightSenzor()
+{
+  int refMeasuredVal = 0; // pracovni hodnota ze senzoru
+  int measuredVal = 0; // pracovni hodnota ze senzoru
+  int measSum = 0; // suma merenych hodnota
+  int dev =0; // deviace mereni
+  const int devTreshold = 4; // deviace mereni
+  const int numOfMeasurement = 3;
+  
+  // načtení hodnoty z analogového pinu s průměrováním 3 měření po 0,5s
+  refMeasuredVal = analogRead(analogPin);
+  for (int i=0; i < numOfMeasurement; i++){
+    measuredVal = analogRead(analogPin);
+    measSum += measuredVal;
+    dev = refMeasuredVal - measuredVal;
+    if((dev > devTreshold) || (dev < (-devTreshold))){
+      break;
+    }
+    delay(500);
+  }
+  // osetreni spicek
+  if((dev < devTreshold) && (dev > (-devTreshold))){
+    lightIntens = measSum / numOfMeasurement;
+  }
+   
 }
 
 void loop() {
