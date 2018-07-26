@@ -1,4 +1,6 @@
 
+#include <avr/sleep.h>//this AVR library contains the methods that controls the sleep modes
+#include <avr/power.h>
 //****************Constants****************//
 // PIN addres
 #define analogPin A0
@@ -21,6 +23,8 @@ int lightIntens;
 volatile byte bDoorOpened; // 0 => closed, 1 => open
 volatile int nLightSenzorDeactT; // 0 => closed, 1 => 
 volatile boolean bChangeDoorStateByBtn;
+volatile boolean bThreadSleep;  // rika ze hlavni vlakno je uspane
+volatile int f_timer=0;
 
 //******************Init*******************//
 void setup() {
@@ -28,12 +32,34 @@ void setup() {
   nLightSenzorDeactT = 0;
   lightIntens = 0;
   bDoorOpened = 1;
-  pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(LED_BUILTIN, OUTPUT);  // Use the led on pin 13 to indecate when Arduino is A sleep
   pinMode(DIR_OPEN_PIN, OUTPUT);
   pinMode(DIR_CLOSE_PIN, OUTPUT);
-  pinMode(BTN_PIN, INPUT);
+  pinMode(BTN_PIN, INPUT_PULLUP);
+
+  /*** Configure the timer.***/
+  
+  /* Normal timer operation.*/
+  TCCR1A = 0x00; 
+  
+  /* Clear the timer counter register.
+   * You can pre-load this register with a value in order to 
+   * reduce the timeout period, say if you wanted to wake up
+   * ever 4.0 seconds exactly.
+   */
+  TCNT1=0x0000; 
+  
+  /* Configure the prescaler for 1:1024, giving us a 
+   * timeout of 4.09 seconds.
+   */
+  TCCR1B = 0x05;
+  
+  /* Enable the timer overlow interrupt. */
+  TIMSK1=0x01;
+  
   // Events setup
   attachInterrupt(digitalPinToInterrupt(BTN_PIN), btnTouched, RISING);
+
 #ifdef DEBUG
   Serial.begin(9600);
 #endif
@@ -68,41 +94,49 @@ void ReadFromLightSenzor()
 }
 
 void loop() {
-
-  // door control by senzor
-  if(nLightSenzorDeactT == 0)
+  if(f_timer==1)
   {
-    ReadFromLightSenzor();
+    f_timer = 0;
+    /* Toggle the LED */
+    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+    
+    // door controled by senzor
+    if(nLightSenzorDeactT == 0)
+    {
+      ReadFromLightSenzor();
+    
+      // put your main code here, to run repeatedly:
+      if (lightIntens > DARK_TRESHOLD) {
+        OpenDoor();
+      }
+      else {
+        CloseDoor();
+      }
+    }
   
-    // put your main code here, to run repeatedly:
-    if (lightIntens > DARK_TRESHOLD) {
-      OpenDoor();
+    // door controled by btn
+    if (bChangeDoorStateByBtn){
+      if (bDoorOpened == 1) {
+        CloseDoor();
+      } else {
+        OpenDoor();
+      }
+      bChangeDoorStateByBtn = false;
+      nLightSenzorDeactT = SENZOR_DEACT_TIME;
     }
-    else {
-      CloseDoor();
+  
+    if (nLightSenzorDeactT > 0){
+      nLightSenzorDeactT-=1;
     }
+    #ifdef DEBUG
+      Serial.print("Senzor deactivation time ");
+      Serial.println(nLightSenzorDeactT);
+    #endif
+    //polling
+    delay(1000);
+    /* Re-enter sleep mode. */
+    enterSleep();
   }
-
-  // door control by btn
-  if (bChangeDoorStateByBtn){
-    if (bDoorOpened == 1) {
-      CloseDoor();
-    } else {
-      OpenDoor();
-    }
-    bChangeDoorStateByBtn = false;
-    nLightSenzorDeactT = SENZOR_DEACT_TIME;
-  }
-
-  if (nLightSenzorDeactT > 0){
-    nLightSenzorDeactT-=1;
-  }
-  #ifdef DEBUG
-    Serial.print("Senzor deactivation time ");
-    Serial.println(nLightSenzorDeactT);
-  #endif
-  //polling
-  delay(1000);
 
 }
 
@@ -154,10 +188,72 @@ void CloseDoor() {
   #endif
 }
 
+// uspavani
+/***************************************************
+ *  Name:        ISR(TIMER1_OVF_vect)
+ *
+ *  Returns:     Nothing.
+ *
+ *  Parameters:  None.
+ *
+ *  Description: Timer1 Overflow interrupt.
+ *
+ ***************************************************/
+ISR(TIMER1_OVF_vect)
+{
+  /* set the flag. */
+   if(f_timer == 0)
+   {
+     f_timer = 1;
+   }
+}
+
+
+/***************************************************
+ *  Name:        enterSleep
+ *
+ *  Returns:     Nothing.
+ *
+ *  Parameters:  None.
+ *
+ *  Description: Enters the arduino into sleep mode.
+ *
+ ***************************************************/
+void enterSleep(void)
+{
+  set_sleep_mode(SLEEP_MODE_IDLE);
+  
+  sleep_enable();
+
+
+  /* Disable all of the unused peripherals. This will reduce power
+   * consumption further and, more importantly, some of these
+   * peripherals may generate interrupts that will wake our Arduino from
+   * sleep!
+   */
+  power_adc_disable();
+  power_spi_disable();
+  power_timer0_disable();
+  power_timer2_disable();
+  power_twi_disable();  
+
+  /* Now enter sleep mode. */
+  sleep_mode();
+  
+  /* The program will continue from here after the timer timeout*/
+  sleep_disable(); /* First thing to do is disable sleep. */
+  
+  /* Re-enable the peripherals. */
+  power_all_enable();
+}
+
+
 //****************Events******************//
 
 void btnTouched() {
+  #ifdef DEBUG
   Serial.print("btn ");
+  #endif
   bChangeDoorStateByBtn = true;
   delay(200);
 }
