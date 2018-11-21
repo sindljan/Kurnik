@@ -6,9 +6,9 @@
 #define DIR_OPEN_PIN 7
 #define DIR_CLOSE_PIN 6
 
-#define DARK_TRESHOLD 2
+#define DARK_TRESHOLD 0
 
-#define SENZOR_DEACT_TIME 60
+#define SENZOR_DEACT_TIME 3*60
 #define MAIN_LOOP_DELAY 3000
 
 // pokud je definovano pak je program v rezimu ladeni
@@ -114,8 +114,7 @@ void loop() {
   if(nLightSenzorDeactT == 0)
   {
     UpdateLightIntensity();
-  
-    // put your main code here, to run repeatedly:
+    
     if (lightIntens > DARK_TRESHOLD) {
       OpenDoor();
     }
