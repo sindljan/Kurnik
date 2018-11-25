@@ -12,7 +12,7 @@
 #define MAIN_LOOP_DELAY 3000
 
 // pokud je definovano pak je program v rezimu ladeni
-//#define DEBUG
+#define DEBUG
 
 
 
@@ -224,5 +224,3 @@ void btnTouched() {
   bChangeDoorStateByBtn = true;
   delay(200);
 }
-
-
