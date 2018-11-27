@@ -2,8 +2,8 @@
 //****************Constants****************//
 // PIN addres
 #define analogPin A0
-#define PRX_PIN 0
-#define BTN_PIN 5
+#define PRX_PIN 5
+#define BTN_PIN 2
 #define DIR_OPEN_PIN 7
 #define DIR_CLOSE_PIN 6
 
@@ -15,8 +15,8 @@
 #define CMD_OPEN true
 #define CMD_CLOSE false
 
-#define DOOR_OPENING_TIME 55 // doba pro otevreni [s]
-#define DOOR_CLOSING_TIME 25 // doba pro zavreni [s]
+#define DOOR_OPENING_TIME 80 // doba pro otevreni [s]
+#define DOOR_CLOSING_TIME 48 // doba pro zavreni [s]
 
 
 // pokud je definovano pak je program v rezimu ladeni
@@ -154,7 +154,12 @@ void loop() {
 }
 
 bool AreDoorOpen(){
-  return !digitalRead(PRX_PIN);
+  bool doorStatus;
+  doorStatus = digitalRead(PRX_PIN);
+  #ifdef DEBUG
+  Serial.print(doorStatus);
+  #endif
+  return doorStatus;
 }
 
 void StopMotor()
@@ -194,7 +199,7 @@ void OpenDoor() {
     for(int i=0; i<=(2*DOOR_OPENING_TIME); i++){
       delay(500);
       // otevreni je odchyceno senzorem
-      if(AreDoorOpen==true){
+      if((AreDoorOpen()==true)&&(i>5)){
         break;
       }
       
@@ -233,7 +238,11 @@ void CloseDoor() {
         Serial.println(DOOR_CLOSING_TIME);
       #endif
     }
+    // Stop Motor
+    StopMotor();
+    
     bDoorOpened = 0;
+    
   }
   #ifdef DEBUG
     Serial.println("Door closed");
