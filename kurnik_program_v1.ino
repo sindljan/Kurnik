@@ -2,7 +2,8 @@
 //****************Constants****************//
 // PIN addres
 #define analogPin A0
-#define BTN_PIN 2
+#define PRX_PIN 0
+#define BTN_PIN 5
 #define DIR_OPEN_PIN 7
 #define DIR_CLOSE_PIN 6
 
@@ -10,6 +11,13 @@
 
 #define SENZOR_DEACT_TIME 3*60
 #define MAIN_LOOP_DELAY 3000
+
+#define CMD_OPEN true
+#define CMD_CLOSE false
+
+#define DOOR_OPENING_TIME 55 // doba pro otevreni [s]
+#define DOOR_CLOSING_TIME 25 // doba pro zavreni [s]
+
 
 // pokud je definovano pak je program v rezimu ladeni
 #define DEBUG
@@ -19,8 +27,6 @@
 //****************Variables****************//
 // vytvoření proměnných pro výsledky měření
 int lightIntens;
-const int nMotorRunTime_Open = 42;  // doba pro otevreni [s]
-const int nMotorRunTime_Close = 21; // doba pro zavreni [s]
 volatile byte bDoorOpened; // 0 => closed, 1 => open
 volatile int nLightSenzorDeactT; // 0 => closed, 1 => 
 volatile boolean bChangeDoorStateByBtn;
@@ -33,10 +39,11 @@ void setup() {
   nLightSenzorDeactT = 0;
   lightIntens = 0;
   bDoorOpened = 0;
-  pinMode(LED_BUILTIN, OUTPUT);  // Use the led on pin 13 to indecate when Arduino is A sleep
+  pinMode(LED_BUILTIN, OUTPUT);
   pinMode(DIR_OPEN_PIN, OUTPUT);
   pinMode(DIR_CLOSE_PIN, OUTPUT);
   pinMode(BTN_PIN, INPUT);
+  pinMode(PRX_PIN, INPUT);
  
   // Events setup
   attachInterrupt(digitalPinToInterrupt(BTN_PIN), btnTouched, RISING);
@@ -146,6 +153,10 @@ void loop() {
 
 }
 
+bool AreDoorOpen(){
+  return !digitalRead(PRX_PIN);
+}
+
 void StopMotor()
 {
   digitalWrite(DIR_OPEN_PIN, LOW);
@@ -155,7 +166,7 @@ void StopMotor()
   #endif
 }
 
-void RunMotor(int runTime, bool direct) {  
+void RunMotor(bool direct) {
   // Stop Motor in case that its running
   StopMotor();
   #ifdef DEBUG
@@ -163,24 +174,11 @@ void RunMotor(int runTime, bool direct) {
   #endif
   
   // open/close it
-  if (direct == true){
+  if (direct == CMD_OPEN){
     digitalWrite(DIR_OPEN_PIN, HIGH);
   } else {
     digitalWrite(DIR_CLOSE_PIN, HIGH);
   }
-
-  for(int i=0; i<=runTime; i++){
-    delay(1000);
-    #ifdef DEBUG
-      Serial.print("Motor run time[s]: ");
-      Serial.print(i);
-      Serial.print(", goal[s]: ");
-      Serial.println(runTime);
-    #endif
-  }
-    
-  // Stop Motor
-  StopMotor();
   
 }
 
@@ -190,8 +188,26 @@ void OpenDoor() {
     #ifdef DEBUG
       Serial.println("Opening door");
     #endif
+ 
     digitalWrite(LED_BUILTIN, HIGH); // zapne LED
-    RunMotor(nMotorRunTime_Open, 1);
+    RunMotor(CMD_OPEN);
+    for(int i=0; i<=(2*DOOR_OPENING_TIME); i++){
+      delay(500);
+      // otevreni je odchyceno senzorem
+      if(AreDoorOpen==true){
+        break;
+      }
+      
+      #ifdef DEBUG
+        Serial.print("Motor run time[s]: ");
+        Serial.print(i/2);
+        Serial.print(", goal[s]: ");
+        Serial.println(DOOR_OPENING_TIME);
+      #endif
+    }
+    // Stop Motor
+    StopMotor();
+    
     bDoorOpened = 1;
   }
   #ifdef DEBUG
@@ -205,8 +221,18 @@ void CloseDoor() {
     #ifdef DEBUG
       Serial.println("Closing door");
     #endif
-    digitalWrite(LED_BUILTIN, LOW); // zapne LED
-    RunMotor(nMotorRunTime_Close, 0);
+    
+    digitalWrite(LED_BUILTIN, LOW); // vypne LED
+    RunMotor(CMD_CLOSE);
+    for(int i=0; i<=DOOR_CLOSING_TIME; i++){
+      delay(1000);    
+      #ifdef DEBUG
+        Serial.print("Motor run time[s]: ");
+        Serial.print(i);
+        Serial.print(", goal[s]: ");
+        Serial.println(DOOR_CLOSING_TIME);
+      #endif
+    }
     bDoorOpened = 0;
   }
   #ifdef DEBUG
