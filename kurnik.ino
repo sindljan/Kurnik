@@ -16,7 +16,7 @@
 #define CMD_CLOSE false
 
 #define DOOR_OPENING_TIME 80 // doba pro otevreni [s]
-#define DOOR_CLOSING_TIME 48 // doba pro zavreni [s]
+#define DOOR_CLOSING_TIME 52 // doba pro zavreni [s]
 
 #define DS3231_I2C_ADDRESS 0x68 // Adresa I2C modulu s RTC
 
@@ -187,10 +187,11 @@ void OpenDoor() {
 
     digitalWrite(LED_BUILTIN, HIGH); // zapne LED
     RunMotor(CMD_OPEN);
+    delay(5000); //cas aby najel na senzor pokud ho prejel
     for (int i = 0; i <= (2 * DOOR_OPENING_TIME); i++) {
       delay(500);
       // otevreni je odchyceno senzorem
-      if ((AreDoorOpen() == true) && (i > 5)) {
+      if (AreDoorOpen() == true) {
         break;
       }
 
