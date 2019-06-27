@@ -2,26 +2,49 @@
 //****************Constants****************//
 // PIN addres
 #define analogPin A0
-#define PRX_PIN 5
 #define BTN_PIN 2
-#define DIR_OPEN_PIN 7
-#define DIR_CLOSE_PIN 6
+
+#define DOOR1_OPEN_SENZOR 4
+#define DOOR2_OPEN_SENZOR 3
+
+#define M1 1
+#define M2 2
+
+#define M2_DIR_OPEN_PIN 10
+#define M2_DIR_CLOSE_PIN 11
+
+#define M1_DIR_OPEN_PIN 12
+#define M1_DIR_CLOSE_PIN 13
 
 #define DARK_TRESHOLD 0
 
-#define SENZOR_DEACT_TIME 3*60
-#define MAIN_LOOP_DELAY 3000
+#define MAIN_LOOP_DELAY 300
 
+// door commands
 #define CMD_OPEN true
 #define CMD_CLOSE false
 
-#define DOOR_OPENING_TIME 80 // doba pro otevreni [s]
-#define DOOR_CLOSING_TIME 52 // doba pro zavreni [s]
+#define DOOR1_CLOSING_TIME 48 // doba pro zavreni [s]
+#define DOOR2_CLOSING_TIME 48 // doba pro zavreni [s]
 
 #define DS3231_I2C_ADDRESS 0x68 // Adresa I2C modulu s RTC
 
 // pokud je definovano pak je program v rezimu ladeni
 #define DEBUG
+
+// prog status
+#define START 1
+#define MEASURE_LIGHT 2
+#define CHECK_TIMER 3
+#define OPEN_DOOR1 4
+#define DOOR1_OPENING 5
+#define OPEN_DOOR2 6
+#define DOOR2_OPENING 7
+#define CLOSE_DOOR1 8
+#define DOOR1_CLOSING 9
+#define CLOSE_DOOR2 10
+#define DOOR2_CLOSING 11
+
 
 
 struct Time {
@@ -40,23 +63,30 @@ struct Date {
 //****************Variables****************//
 // vytvoření proměnných pro výsledky měření
 int lightIntens;
+int ProgState;
+Time ClosingStart;
+boolean bTodayOpen;
+boolean bTodayClose;
 volatile byte bDoorOpened; // 0 => closed, 1 => open
 volatile int nLightSenzorDeactT; // 0 => closed, 1 =>
 volatile boolean bChangeDoorStateByBtn;
-volatile boolean bThreadSleep;  // rika ze hlavni vlakno je uspane
-volatile int f_timer = 0;
+
 
 //******************Init*******************//
 void setup() {
+  ProgState = START;
   bChangeDoorStateByBtn = false;
   nLightSenzorDeactT = 0;
   lightIntens = 0;
   bDoorOpened = 0;
   pinMode(LED_BUILTIN, OUTPUT);
-  pinMode(DIR_OPEN_PIN, OUTPUT);
-  pinMode(DIR_CLOSE_PIN, OUTPUT);
+  pinMode(M1_DIR_OPEN_PIN, OUTPUT);
+  pinMode(M1_DIR_CLOSE_PIN, OUTPUT);
+  pinMode(M2_DIR_OPEN_PIN, OUTPUT);
+  pinMode(M2_DIR_CLOSE_PIN, OUTPUT);
   pinMode(BTN_PIN, INPUT);
-  pinMode(PRX_PIN, INPUT);
+  pinMode(DOOR1_OPEN_SENZOR, INPUT);
+  pinMode(DOOR2_OPEN_SENZOR, INPUT);
   calendar_setup();
   // Events setup
   attachInterrupt(digitalPinToInterrupt(BTN_PIN), btnTouched, RISING);
@@ -119,8 +149,8 @@ void UpdateLightIntensity()
 bool IsTimeToOpenDoor()
 {
   bool ItsTime = (lightIntens > DARK_TRESHOLD);
-  const byte openTime = 8;
-  const byte closeTime = 18;
+  const byte openTime = 7;
+  const byte closeTime = 22;
   Time now = getTime();
   if ((now.h >= openTime) && (now.h <= closeTime)) ItsTime = true;
 
@@ -131,122 +161,114 @@ bool IsTimeToOpenDoor()
   return ItsTime;
 }
 
-void loop() {
-
-  // door controled by senzor
-  if (nLightSenzorDeactT == 0)
-  {
-    UpdateLightIntensity();
-
-    if (IsTimeToOpenDoor()) {
-      OpenDoor();
-    }
-    else {
-      CloseDoor();
-    }
-  }
-
-  // door controled by btn
-  if (bChangeDoorStateByBtn) {
-    if (bDoorOpened == 1) {
-      CloseDoor();
-    } else {
-      OpenDoor();
-    }
-    bChangeDoorStateByBtn = false;
-    nLightSenzorDeactT = SENZOR_DEACT_TIME;
-  }
-
-  if (nLightSenzorDeactT > 0) {
-    nLightSenzorDeactT -= 1;
-  }
-#ifdef DEBUG
-  Serial.print("Senzor deactivation time ");
-  Serial.println(nLightSenzorDeactT);
-#endif
-  //polling
-  delay(MAIN_LOOP_DELAY);
-
+bool DayChanged(Time now)
+{
+  if(now.h = 0) {return true;}
+  return false;
 }
 
-bool AreDoorOpen() {
+void loop() {
+  Time now = getTime();
+  
+  switch (ProgState) {
+  case START:
+    if(DayChanged(now)){
+      bTodayClose = false;
+      bTodayOpen = false;
+    }
+    ProgState = MEASURE_LIGHT;
+    break;
+  case MEASURE_LIGHT:
+    ProgState = CHECK_TIMER;
+    break;
+  case CHECK_TIMER:
+    if(IsTimeToOpenDoor()&&!(bDoorOpened)&&!bTodayOpen){
+      bTodayOpen = true;
+      ProgState = OPEN_DOOR1;
+    } else if (!IsTimeToOpenDoor()&&(bDoorOpened)&&!bTodayClose){
+      bTodayClose = true;
+      ProgState = CLOSE_DOOR1;
+    } else {
+      ProgState = START;
+    }
+    break;
+  case OPEN_DOOR1:
+    RunMotor(CMD_OPEN,M1);
+    ProgState = DOOR1_OPENING;
+    break;
+  case DOOR1_OPENING:
+    if(AreDoor1Open()){
+      StopMotor(M1);
+      ProgState = OPEN_DOOR2;
+    }
+    break;
+  case OPEN_DOOR2:
+    RunMotor(CMD_OPEN,M2);
+    ProgState = DOOR2_OPENING;
+    break;
+  case DOOR2_OPENING:
+    if(AreDoor2Open()){
+      StopMotor(M2);
+      bDoorOpened = true;
+      ProgState = START;
+    }
+    break;
+  case CLOSE_DOOR1:
+    ClosingStart = getTime();
+    RunMotor(CMD_CLOSE,M1);
+    ProgState = DOOR1_CLOSING;
+    break;
+  case DOOR1_CLOSING:
+    if((now.h*3600+now.m*60+now.s)-(ClosingStart.h*3600+ClosingStart.m*60+ClosingStart.s)>=DOOR1_CLOSING_TIME){
+      StopMotor(M1);
+      ProgState = CLOSE_DOOR2;
+    }
+    break;
+  case CLOSE_DOOR2:
+    ClosingStart = getTime();
+    RunMotor(CMD_CLOSE,M2);
+    ProgState = DOOR2_CLOSING;
+    break;  
+  case DOOR2_CLOSING:
+    if((now.h*3600+now.m*60+now.s)-(ClosingStart.h*3600+ClosingStart.m*60+ClosingStart.s)>=DOOR1_CLOSING_TIME){
+      StopMotor(M2);
+      bDoorOpened = false;
+      ProgState = START;
+    }
+    break;                             
+  default:
+    // statements
+    Serial.print("Unexpected state of machine: " );
+    Serial.print(ProgState);
+    break;
+  }
+  //polling
+  delay(MAIN_LOOP_DELAY);
+}
+
+bool AreDoor1Open() {
   bool doorStatus;
-  doorStatus = digitalRead(PRX_PIN);
+  doorStatus = digitalRead(DOOR1_OPEN_SENZOR);
 #ifdef DEBUG
   Serial.print(doorStatus);
 #endif
   return doorStatus;
 }
 
-void OpenDoor() {
-  if (bDoorOpened == 0)
-  {
+bool AreDoor2Open() {
+  bool doorStatus;
+  doorStatus = digitalRead(DOOR2_OPEN_SENZOR);
 #ifdef DEBUG
-    Serial.println("Opening door");
+  Serial.print(doorStatus);
 #endif
-
-    digitalWrite(LED_BUILTIN, HIGH); // zapne LED
-    RunMotor(CMD_OPEN);
-    delay(5000); //cas aby najel na senzor pokud ho prejel
-    for (int i = 0; i <= (2 * DOOR_OPENING_TIME); i++) {
-      delay(500);
-      // otevreni je odchyceno senzorem
-      if (AreDoorOpen() == true) {
-        break;
-      }
-
-#ifdef DEBUG
-      Serial.print("Motor run time[s]: ");
-      Serial.print(i / 2);
-      Serial.print(", goal[s]: ");
-      Serial.println(DOOR_OPENING_TIME);
-#endif
-    }
-    // Stop Motor
-    StopMotor();
-
-    bDoorOpened = 1;
-  }
-#ifdef DEBUG
-  Serial.println("Door opened");
-#endif
+  return doorStatus;
 }
-
-void CloseDoor() {
-  if (bDoorOpened == 1)
-  {
-#ifdef DEBUG
-    Serial.println("Closing door");
-#endif
-
-    digitalWrite(LED_BUILTIN, LOW); // vypne LED
-    RunMotor(CMD_CLOSE);
-    for (int i = 0; i <= DOOR_CLOSING_TIME; i++) {
-      delay(1000);
-#ifdef DEBUG
-      Serial.print("Motor run time[s]: ");
-      Serial.print(i);
-      Serial.print(", goal[s]: ");
-      Serial.println(DOOR_CLOSING_TIME);
-#endif
-    }
-    // Stop Motor
-    StopMotor();
-
-    bDoorOpened = 0;
-
-  }
-#ifdef DEBUG
-  Serial.println("Door closed");
-#endif
-}
-
 
 //****************Events******************//
 
 void btnTouched() {
 #ifdef DEBUG
-  Serial.print("btn ");
+  Serial.print("btn");
 #endif
   bChangeDoorStateByBtn = true;
   delay(200);
@@ -265,30 +287,54 @@ int ReadFromLightSenzor(int numOfMeasurement)
   return measuredVal;
 }
 //*************************************** Light Sensor *********************************//
+
+
+
+
+
 //****************************************** Motor ************************************//
 
-void StopMotor()
+void StopMotor(int motorID)
 {
-  digitalWrite(DIR_OPEN_PIN, LOW);
-  digitalWrite(DIR_CLOSE_PIN, LOW);
+  if (motorID = M1) {
+    digitalWrite(M1_DIR_OPEN_PIN, LOW);
+    digitalWrite(M1_DIR_CLOSE_PIN, LOW);
+  } else {
+    digitalWrite(M2_DIR_OPEN_PIN, LOW);
+    digitalWrite(M2_DIR_CLOSE_PIN, LOW);
+  }
 #ifdef DEBUG
-  Serial.println("Stopped");
+  Serial.print("Motor ");
+  Serial.print(motorID);
+  Serial.println(" stopped. ");
 #endif
 }
 
-void RunMotor(bool direct) {
+void RunMotor(bool direct, int motorID) {
   // Stop Motor in case that its running
-  StopMotor();
-#ifdef DEBUG
-  Serial.println("Motor running");
-#endif
-
-  // open/close it
-  if (direct == CMD_OPEN) {
-    digitalWrite(DIR_OPEN_PIN, HIGH);
+  StopMotor(motorID);
+  
+  // open or close it
+  if (motorID = M1) {
+    if (direct == CMD_OPEN) {
+      digitalWrite(M1_DIR_OPEN_PIN, HIGH);
+    } else {
+      digitalWrite(M1_DIR_CLOSE_PIN, HIGH);
+    }
   } else {
-    digitalWrite(DIR_CLOSE_PIN, HIGH);
+    if (direct == CMD_OPEN) {
+      digitalWrite(M2_DIR_OPEN_PIN, HIGH);
+    } else {
+      digitalWrite(M2_DIR_CLOSE_PIN, HIGH);
+    }
   }
+
+  #ifdef DEBUG
+  Serial.print("Motor running");
+  Serial.print(motorID);
+  Serial.println(" running.");
+  #endif
+
 }
 
 //****************************************** Motor ************************************//
@@ -303,6 +349,7 @@ byte decToBcd(byte val) {
 byte bcdToDec(byte val) {
   return ( (val / 16 * 10) + (val % 16) );
 }
+
 String TimeToString(Time t){
   String h = (String)t.h;
   String m = (String)t.m;
