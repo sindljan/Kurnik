@@ -98,54 +98,6 @@ void setup() {
 
 //****************Program******************//
 
-void UpdateLightIntensity()
-{
-  int refMeasuredVal = 0; // pracovni hodnota ze senzoru
-  int measuredVal = 0; // pracovni hodnota ze senzoru
-  int measSum = 0; // suma merenych hodnota
-  int dev = 0; // deviace mereni
-  const int devTreshold = 15; // deviace mereni
-  const int numOfMeasurement = 3;
-
-  // načtení hodnoty z analogového pinu s průměrováním 3 měření po 0,5s
-  refMeasuredVal = ReadFromLightSenzor(10);
-#ifdef DEBUG
-  Serial.print("Measured light ref value: ");
-  Serial.println(refMeasuredVal);
-#endif
-  for (int i = 0; i < numOfMeasurement; i++) {
-    measuredVal = ReadFromLightSenzor(10);
-#ifdef DEBUG
-    Serial.print("Measured light value: ");
-    Serial.println(measuredVal);
-#endif
-    measSum += measuredVal;
-    dev = refMeasuredVal - measuredVal;
-    if ((dev > devTreshold) || (dev < (-devTreshold))) {
-      break;
-    }
-    delay(2000);
-  }
-  // osetreni spicek
-  if ((dev < devTreshold) && (dev > (-devTreshold))) {
-    lightIntens = round(measSum / numOfMeasurement);
-  } else {
-#ifdef DEBUG
-    Serial.print("Incorrect measurement: ");
-#endif
-  }
-
-#ifdef DEBUG
-  Serial.print("Average light senzor value: ");
-  Serial.print(lightIntens);
-  Serial.print(", Deviation:  ");
-  Serial.print(dev);
-  Serial.print(", DevThreshold: ");
-  Serial.println(devTreshold);
-#endif
-
-}
-
 bool IsTimeToOpenDoor()
 {
   bool ItsTime = (lightIntens > DARK_TRESHOLD);
@@ -172,11 +124,19 @@ void loop() {
   
   switch (ProgState) {
   case START:
+    ProgState = MEASURE_LIGHT;
     if(DayChanged(now)){
       bTodayClose = false;
       bTodayOpen = false;
     }
-    ProgState = MEASURE_LIGHT;
+    if(bChangeDoorStateByBtn){
+      bChangeDoorStateByBtn = false;
+      if(bDoorOpened){
+        ProgState = CLOSE_DOOR1;
+      } else {
+        ProgState = OPEN_DOOR1;
+      }
+    }
     break;
   case MEASURE_LIGHT:
     ProgState = CHECK_TIMER;
@@ -288,9 +248,53 @@ int ReadFromLightSenzor(int numOfMeasurement)
 }
 //*************************************** Light Sensor *********************************//
 
+void UpdateLightIntensity()
+{
+  int refMeasuredVal = 0; // pracovni hodnota ze senzoru
+  int measuredVal = 0; // pracovni hodnota ze senzoru
+  int measSum = 0; // suma merenych hodnota
+  int dev = 0; // deviace mereni
+  const int devTreshold = 15; // deviace mereni
+  const int numOfMeasurement = 3;
 
+  // načtení hodnoty z analogového pinu s průměrováním 3 měření po 0,5s
+  refMeasuredVal = ReadFromLightSenzor(10);
+#ifdef DEBUG
+  Serial.print("Measured light ref value: ");
+  Serial.println(refMeasuredVal);
+#endif
+  for (int i = 0; i < numOfMeasurement; i++) {
+    measuredVal = ReadFromLightSenzor(10);
+#ifdef DEBUG
+    Serial.print("Measured light value: ");
+    Serial.println(measuredVal);
+#endif
+    measSum += measuredVal;
+    dev = refMeasuredVal - measuredVal;
+    if ((dev > devTreshold) || (dev < (-devTreshold))) {
+      break;
+    }
+    delay(2000);
+  }
+  // osetreni spicek
+  if ((dev < devTreshold) && (dev > (-devTreshold))) {
+    lightIntens = round(measSum / numOfMeasurement);
+  } else {
+#ifdef DEBUG
+    Serial.print("Incorrect measurement: ");
+#endif
+  }
 
+#ifdef DEBUG
+  Serial.print("Average light senzor value: ");
+  Serial.print(lightIntens);
+  Serial.print(", Deviation:  ");
+  Serial.print(dev);
+  Serial.print(", DevThreshold: ");
+  Serial.println(devTreshold);
+#endif
 
+}
 
 //****************************************** Motor ************************************//
 
@@ -334,7 +338,6 @@ void RunMotor(bool direct, int motorID) {
   Serial.print(motorID);
   Serial.println(" running.");
   #endif
-
 }
 
 //****************************************** Motor ************************************//
