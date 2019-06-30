@@ -4,8 +4,8 @@
 #define analogPin A0
 #define BTN_PIN 2
 
-#define DOOR1_OPEN_SENZOR 4
-#define DOOR2_OPEN_SENZOR 3
+#define DOOR1_OPEN_SENZOR 3
+#define DOOR2_OPEN_SENZOR 4
 
 #define M1 1
 #define M2 2
@@ -18,18 +18,20 @@
 
 #define DARK_TRESHOLD 0
 
-#define MAIN_LOOP_DELAY 300
+#define MAIN_LOOP_DELAY 500
 
 // door commands
 #define CMD_OPEN true
 #define CMD_CLOSE false
 
-#define DOOR1_CLOSING_TIME 48 // doba pro zavreni [s]
-#define DOOR2_CLOSING_TIME 48 // doba pro zavreni [s]
+#define DOOR1_CLOSING_TIME 180 // doba pro zavreni [s]
+#define DOOR2_CLOSING_TIME 155 // doba pro zavreni [s]
+#define DOOR_OPENING_LIM_TIME 240 // limitni doba pro otevreni [s]
 
 #define DS3231_I2C_ADDRESS 0x68 // Adresa I2C modulu s RTC
 
 // pokud je definovano pak je program v rezimu ladeni
+//
 #define DEBUG
 
 // prog status
@@ -65,6 +67,7 @@ struct Date {
 int lightIntens;
 int ProgState;
 Time ClosingStart;
+Time OpeningStart;
 boolean bTodayOpen;
 boolean bTodayClose;
 volatile byte bDoorOpened; // 0 => closed, 1 => open
@@ -88,6 +91,8 @@ void setup() {
   pinMode(DOOR1_OPEN_SENZOR, INPUT);
   pinMode(DOOR2_OPEN_SENZOR, INPUT);
   calendar_setup();
+  StopMotor(M1);
+  StopMotor(M2);
   // Events setup
   attachInterrupt(digitalPinToInterrupt(BTN_PIN), btnTouched, RISING);
 
@@ -121,6 +126,7 @@ bool DayChanged(Time now)
 
 void loop() {
   Time now = getTime();
+  int ClosingT;
   
   switch (ProgState) {
   case START:
@@ -153,47 +159,83 @@ void loop() {
     }
     break;
   case OPEN_DOOR1:
+    #ifdef DEBUG
+    Serial.println("Door 1 are opening now.");
+    #endif  
+    OpeningStart = getTime();
     RunMotor(CMD_OPEN,M1);
-    ProgState = DOOR1_OPENING;
+    ProgState = DOOR1_OPENING;  
     break;
   case DOOR1_OPENING:
     if(AreDoor1Open()){
       StopMotor(M1);
       ProgState = OPEN_DOOR2;
+      #ifdef DEBUG
+      Serial.println("Door 1 opened.");
+      #endif 
     }
     break;
   case OPEN_DOOR2:
+    #ifdef DEBUG
+    Serial.println("Door 2 are opening now.");
+    #endif   
+    OpeningStart = getTime();
     RunMotor(CMD_OPEN,M2);
-    ProgState = DOOR2_OPENING;
+    ProgState = DOOR2_OPENING;   
     break;
   case DOOR2_OPENING:
     if(AreDoor2Open()){
       StopMotor(M2);
       bDoorOpened = true;
       ProgState = START;
+      #ifdef DEBUG
+      Serial.println("Door 2 opened.");
+      #endif 
     }
     break;
   case CLOSE_DOOR1:
+    #ifdef DEBUG
+    Serial.println("Door 1 are closing now.");
+    #endif   
     ClosingStart = getTime();
     RunMotor(CMD_CLOSE,M1);
-    ProgState = DOOR1_CLOSING;
+    ProgState = DOOR1_CLOSING; 
     break;
   case DOOR1_CLOSING:
-    if((now.h*3600+now.m*60+now.s)-(ClosingStart.h*3600+ClosingStart.m*60+ClosingStart.s)>=DOOR1_CLOSING_TIME){
+    ClosingT = (now.h*3600+now.m*60+now.s)-(ClosingStart.h*3600+ClosingStart.m*60+ClosingStart.s);
+    #ifdef DEBUG
+    Serial.print("Door 1 closing time ");
+    Serial.println(ClosingT);
+    #endif 
+    if(ClosingT >= DOOR1_CLOSING_TIME){
       StopMotor(M1);
       ProgState = CLOSE_DOOR2;
+      #ifdef DEBUG
+      Serial.println("Door 1 closed.");
+      #endif 
     }
     break;
   case CLOSE_DOOR2:
+    #ifdef DEBUG
+    Serial.println("Door 2 are closing now.");
+    #endif   
     ClosingStart = getTime();
     RunMotor(CMD_CLOSE,M2);
-    ProgState = DOOR2_CLOSING;
+    ProgState = DOOR2_CLOSING;   
     break;  
   case DOOR2_CLOSING:
-    if((now.h*3600+now.m*60+now.s)-(ClosingStart.h*3600+ClosingStart.m*60+ClosingStart.s)>=DOOR1_CLOSING_TIME){
+    ClosingT = (now.h*3600+now.m*60+now.s)-(ClosingStart.h*3600+ClosingStart.m*60+ClosingStart.s);
+    #ifdef DEBUG
+    Serial.print("Door 2 closing time ");
+    Serial.println(ClosingT);
+    #endif 
+    if(ClosingT >= DOOR1_CLOSING_TIME){
       StopMotor(M2);
       bDoorOpened = false;
       ProgState = START;
+      #ifdef DEBUG
+      Serial.println("Door 2 closed.");
+      #endif        
     }
     break;                             
   default:
@@ -202,24 +244,52 @@ void loop() {
     Serial.print(ProgState);
     break;
   }
+  
+  #ifdef DEBUG
+  Serial.println(ProgState);
+  #endif
   //polling
   delay(MAIN_LOOP_DELAY);
 }
 
 bool AreDoor1Open() {
   bool doorStatus;
-  doorStatus = digitalRead(DOOR1_OPEN_SENZOR);
+  Time now = getTime();
+  int Opening = (now.h*3600+now.m*60+now.s)-(OpeningStart.h*3600+OpeningStart.m*60+OpeningStart.s);
+  
+  doorStatus = !digitalRead(DOOR1_OPEN_SENZOR);
+
+  if(Opening >= DOOR_OPENING_LIM_TIME){
+    doorStatus = true;
+    Serial.println("Door 1 opening error: opening time limit exceeded.");
+  }
+  
 #ifdef DEBUG
-  Serial.print(doorStatus);
+  Serial.print("Opening time: ");
+  Serial.print(Opening);
+  Serial.print(", Door 1 end sensor status: ");
+  Serial.println(doorStatus);
 #endif
   return doorStatus;
 }
 
 bool AreDoor2Open() {
   bool doorStatus;
-  doorStatus = digitalRead(DOOR2_OPEN_SENZOR);
+  Time now = getTime();
+  int Opening = (now.h*3600+now.m*60+now.s)-(OpeningStart.h*3600+OpeningStart.m*60+OpeningStart.s);
+  
+  doorStatus = !digitalRead(DOOR2_OPEN_SENZOR);
+  
+  if(Opening >= DOOR_OPENING_LIM_TIME){
+    doorStatus = true;
+    Serial.println("Door 2 opening error: opening time limit exceeded.");
+  }
+  
 #ifdef DEBUG
-  Serial.print(doorStatus);
+  Serial.print("Opening time: ");
+  Serial.print(Opening);
+  Serial.print(", Door 2 end sensor status: ");
+  Serial.println(doorStatus);
 #endif
   return doorStatus;
 }
@@ -300,7 +370,7 @@ void UpdateLightIntensity()
 
 void StopMotor(int motorID)
 {
-  if (motorID = M1) {
+  if (motorID == M1) {
     digitalWrite(M1_DIR_OPEN_PIN, LOW);
     digitalWrite(M1_DIR_CLOSE_PIN, LOW);
   } else {
@@ -319,7 +389,7 @@ void RunMotor(bool direct, int motorID) {
   StopMotor(motorID);
   
   // open or close it
-  if (motorID = M1) {
+  if (motorID == M1) {
     if (direct == CMD_OPEN) {
       digitalWrite(M1_DIR_OPEN_PIN, HIGH);
     } else {
@@ -334,7 +404,7 @@ void RunMotor(bool direct, int motorID) {
   }
 
   #ifdef DEBUG
-  Serial.print("Motor running");
+  Serial.print("Motor ");
   Serial.print(motorID);
   Serial.println(" running.");
   #endif
@@ -367,7 +437,7 @@ void calendar_setup() {
   Wire.begin();
   // set the initial time here:
   // DS3231 seconds, minutes, hours, day, date, month, year
-  //setDS3231time(00,00,18,5,29,11,18);
+  //setDS3231time(00,30,11,7,30,06,19);
 }
 
 //****************Program******************//
