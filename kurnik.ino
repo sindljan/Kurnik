@@ -110,6 +110,7 @@ bool IsTimeToOpenDoor()
   const byte closeTime = 22;
   Time now = getTime();
   if ((now.h >= openTime) && (now.h <= closeTime)) ItsTime = true;
+  else ItsTime = false;
 
 #ifdef DEBUG
   Serial.println("Now is: " + TimeToString(now));
@@ -148,10 +149,10 @@ void loop() {
     ProgState = CHECK_TIMER;
     break;
   case CHECK_TIMER:
-    if(IsTimeToOpenDoor()&&!(bDoorOpened)&&!bTodayOpen){
+    if(IsTimeToOpenDoor()&&(+bDoorOpened)&&9(!bTodayOpen)){
       bTodayOpen = true;
       ProgState = OPEN_DOOR1;
-    } else if (!IsTimeToOpenDoor()&&(bDoorOpened)&&!bTodayClose){
+    } else if ((!IsTimeToOpenDoor())&&(bDoorOpened)&&(!bTodayClose)){
       bTodayClose = true;
       ProgState = CLOSE_DOOR1;
     } else {
