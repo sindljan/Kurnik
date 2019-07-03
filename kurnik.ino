@@ -24,8 +24,8 @@
 #define CMD_OPEN true
 #define CMD_CLOSE false
 
-#define DOOR1_CLOSING_TIME 180 // doba pro zavreni [s]
-#define DOOR2_CLOSING_TIME 155 // doba pro zavreni [s]
+#define DOOR1_CLOSING_TIME 184 // doba pro zavreni [s]
+#define DOOR2_CLOSING_TIME 158 // doba pro zavreni [s]
 #define DOOR_OPENING_LIM_TIME 240 // limitni doba pro otevreni [s]
 
 #define DS3231_I2C_ADDRESS 0x68 // Adresa I2C modulu s RTC
@@ -68,8 +68,7 @@ int lightIntens;
 int ProgState;
 Time ClosingStart;
 Time OpeningStart;
-boolean bTodayOpen;
-boolean bTodayClose;
+boolean bDoorManualyOperated;
 volatile byte bDoorOpened; // 0 => closed, 1 => open
 volatile int nLightSenzorDeactT; // 0 => closed, 1 =>
 volatile boolean bChangeDoorStateByBtn;
@@ -81,7 +80,8 @@ void setup() {
   bChangeDoorStateByBtn = false;
   nLightSenzorDeactT = 0;
   lightIntens = 0;
-  bDoorOpened = 0;
+  bDoorOpened = 0; // door are closed at when start program
+  bDoorManualyOperated = 0;
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(M1_DIR_OPEN_PIN, OUTPUT);
   pinMode(M1_DIR_CLOSE_PIN, OUTPUT);
@@ -105,39 +105,43 @@ void setup() {
 
 bool IsTimeToOpenDoor()
 {
-  bool ItsTime = (lightIntens > DARK_TRESHOLD);
-  const byte openTime = 7;
-  const byte closeTime = 22;
+  bool ItsTime = false;
+  const byte openTime = 6;
+  const byte closeTime = 21;
   Time now = getTime();
   if ((now.h >= openTime) && (now.h <= closeTime)) ItsTime = true;
-  else ItsTime = false;
-
-#ifdef DEBUG
-  Serial.println("Now is: " + TimeToString(now));
-#endif
-
   return ItsTime;
 }
 
 bool DayChanged(Time now)
 {
-  if(now.h = 0) {return true;}
-  return false;
+  bool result = false;
+  if(now.h == 0) {
+    #ifdef DEBUG
+    Serial.println("Variable reset at midnight.");
+    #endif
+    result = true;
+  }
+  return result;
 }
 
 void loop() {
   Time now = getTime();
   int ClosingT;
-  
+
+  #ifdef DEBUG
+  Serial.println("Now is: " + TimeToString(now));
+  #endif
+    
   switch (ProgState) {
   case START:
     ProgState = MEASURE_LIGHT;
     if(DayChanged(now)){
-      bTodayClose = false;
-      bTodayOpen = false;
+      bDoorManualyOperated = false;
     }
     if(bChangeDoorStateByBtn){
       bChangeDoorStateByBtn = false;
+      bDoorManualyOperated = true; 
       if(bDoorOpened){
         ProgState = CLOSE_DOOR1;
       } else {
@@ -149,11 +153,17 @@ void loop() {
     ProgState = CHECK_TIMER;
     break;
   case CHECK_TIMER:
-    if(IsTimeToOpenDoor()&&(+bDoorOpened)&&9(!bTodayOpen)){
-      bTodayOpen = true;
+    #ifdef DEBUG
+    Serial.print("Is time to open? ");
+    Serial.println(IsTimeToOpenDoor());
+    Serial.print("Are door open? ");
+    Serial.println(bDoorOpened);
+    Serial.print("Was door manualy opened/closed today? ");
+    Serial.println(bDoorManualyOperated);
+    #endif 
+    if(IsTimeToOpenDoor()&&(!bDoorOpened)&&(!bDoorManualyOperated)){
       ProgState = OPEN_DOOR1;
-    } else if ((!IsTimeToOpenDoor())&&(bDoorOpened)&&(!bTodayClose)){
-      bTodayClose = true;
+    } else if ((!IsTimeToOpenDoor())&&(bDoorOpened)&&(!bDoorManualyOperated)){
       ProgState = CLOSE_DOOR1;
     } else {
       ProgState = START;
@@ -230,7 +240,7 @@ void loop() {
     Serial.print("Door 2 closing time ");
     Serial.println(ClosingT);
     #endif 
-    if(ClosingT >= DOOR1_CLOSING_TIME){
+    if(ClosingT >= DOOR2_CLOSING_TIME){
       StopMotor(M2);
       bDoorOpened = false;
       ProgState = START;
@@ -438,7 +448,7 @@ void calendar_setup() {
   Wire.begin();
   // set the initial time here:
   // DS3231 seconds, minutes, hours, day, date, month, year
-  //setDS3231time(00,30,11,7,30,06,19);
+  // setDS3231time(00,44,23,3,03,07,19);
 }
 
 //****************Program******************//
