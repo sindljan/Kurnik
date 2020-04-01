@@ -36,7 +36,7 @@
 
 // pokud je definovano pak je program v rezimu ladeni
 //
-//#define DEBUG
+#define DEBUG
 
 // prog status
 #define START 1
@@ -111,14 +111,20 @@ void setup() {
 
 bool IsTimeToOpenDoor()
 {
-  bool ItsTime = (lightIntens > DARK_TRESHOLD);
+  bool ItsTime = false;
   const byte openTime = OPEN_DOOR_AT;
   const byte closeTime = CLOSE_DOOR_AT;
   Time now = getTime();
-  if ((now.h >= openTime) && (now.h <= closeTime)) ItsTime = true;
+  Date dNow = getDate();
+  if ((now.h >= openTime) && (now.h < closeTime)) ItsTime = true;
 
 #ifdef DEBUG
-  Serial.println("Now is: " + TimeToString(now));
+  Serial.println("Now is: " + TimeToString(now) + " " + DateToString(dNow));
+  if(ItsTime){
+    Serial.println("Door should be open until ("+(String)closeTime+"  Odpoledne)");
+  }  else {
+    Serial.println("Door should be closed until ("+(String)openTime+" Rano)");
+  }
 #endif
 
   return ItsTime;
@@ -438,12 +444,21 @@ String TimeToString(Time t){
   if (t.s<10) s = "0"+(String)t.s;
   return h+":"+m+":"+s;
 }
+
+String DateToString(Date now){
+  String y = (String)now.y;
+  String m = (String)now.m;
+  String d = (String)now.d;
+  String wd = (String)now.wd;
+  
+  return y+"."+m+"."+d+" ("+wd+")";
+}
 //******************Init*******************//
 void calendar_setup() {
   Wire.begin();
   // set the initial time here:
   // DS3231 seconds, minutes, hours, day, date, month, year
-  // setDS3231time(00,29,12,7,15,03,20);
+  //setDS3231time(00,41,19,2,31,03,20);
 }
 
 //****************Program******************//
