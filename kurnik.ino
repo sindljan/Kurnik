@@ -117,8 +117,8 @@ bool IsTimeToOpenDoor()
   byte closeTime;
   Time now = getTime();
   Date dNow = getDate();
-  openTime = OpeningTimes[dNow.m];
-  closeTime = ClosingTimes[dNow.m];
+  openTime = OpeningTimes[dNow.m-1];
+  closeTime = ClosingTimes[dNow.m-1];
   if ((now.h >= openTime) && (now.h < closeTime)) ItsTime = true;
 
 #ifdef DEBUG
