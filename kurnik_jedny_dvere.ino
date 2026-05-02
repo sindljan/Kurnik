@@ -1,5 +1,5 @@
 #include "Wire.h"
-//****************Constants****************//
+//****************Cořnstants****************//
 // PIN addres
 #define analogPin A0
 #define BTN_PIN 2
@@ -199,6 +199,7 @@ void loop() {
   }
   
   #ifdef DEBUG
+  Serial.print("State machine status: " );
   Serial.println(ProgState);
   #endif
   //polling
@@ -311,7 +312,7 @@ void calendar_setup() {
   Wire.begin();
   // set the initial time here:
   // DS3231 seconds, minutes, hours, day, date, month, year
-  // setDS3231time(00,22,15,3,01,06,26);
+  // setDS3231time(00,22,17,6,02,05,26);
 }
 
 //****************Program******************//
