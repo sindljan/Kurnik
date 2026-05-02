@@ -21,7 +21,7 @@
 // Komentar k motorovym konstantam
 // Motor s jednou prevodovkou (cca 30 N/cm) ma zaviraci cas cca 190s a oteviraci cca 157s ne dverich c1
 
-#define DOOR1_CLOSING_TIME 190 // doba pro zavreni [s]
+#define DOOR1_CLOSING_TIME 65 // doba pro zavreni [s]
 #define DOOR_OPENING_LIM_TIME 300 // limitni doba pro otevreni [s]
 
 #define DS3231_I2C_ADDRESS 0x68 // Adresa I2C modulu s RTC
