@@ -163,6 +163,7 @@ void loop() {
   case DOOR1_OPENING:
     if(AreDoor1Open()){
       StopMotor(M1);
+      bDoorOpened = true;
       ProgState = START;
       #ifdef DEBUG
       Serial.println("Door 1 opened.");
@@ -185,6 +186,7 @@ void loop() {
     #endif 
     if(ClosingT >= DOOR1_CLOSING_TIME){
       StopMotor(M1);
+      bDoorOpened = false;
       ProgState = START;
       #ifdef DEBUG
       Serial.println("Door 1 closed.");
